@@ -1942,8 +1942,28 @@ register_panel_server() {
     ip="127.0.0.1"
   fi
 
-  docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
-    -e "insert into node_server (ip,name,grpc_port) select '${ip}','面板服务器',${grpc} from dual where not exists (select 1 from node_server where name='面板服务器');" &>/dev/null
+  # 后端刚起来时还在建表（node_server 由 Go 程序启动时创建），最多等 30 秒
+  local table_ready=0
+  local i=0
+  while [[ ${i} -lt 30 ]]; do
+    if docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
+        -N -e "show tables like 'node_server'" 2>/dev/null | grep -q node_server; then
+      table_ready=1
+      break
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+
+  if [[ ${table_ready} -eq 0 ]]; then
+    echo_content red "---> node_server table is not ready, skip registering this machine into the server list"
+    echo_content yellow "    Please add it manually in the panel: name=面板服务器 ip=${ip} grpc_port=${grpc}"
+    return 0
+  fi
+
+  local sql_err
+  sql_err=$(docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
+    -e "insert into node_server (ip,name,grpc_port) select '${ip}','面板服务器',${grpc} from dual where not exists (select 1 from node_server where name='面板服务器');" 2>&1 | grep -v "Using a password")
 
   local registered_ip
   registered_ip=$(docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
@@ -1955,6 +1975,9 @@ register_panel_server() {
   else
     echo_content red "---> Register this machine into the server list failed, please add it manually"
     echo_content yellow "    name=面板服务器 ip=${ip} grpc_port=${grpc}"
+    if [[ -n "${sql_err}" ]]; then
+      echo_content yellow "    SQL error: ${sql_err}"
+    fi
   fi
 }
 
