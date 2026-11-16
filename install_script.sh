@@ -1909,16 +1909,22 @@ register_panel_server() {
   local db_host="${mariadb_ip}"
   local grpc="${grpc_port}"
 
-  [[ -z "${db_pas}" ]] && db_pas=$(get_ini_value "${trojan_panel_core_config_path}" mysql.password)
-  [[ -z "${db_pas}" ]] && db_pas=$(get_ini_value "${trojan_panel_config_path}" mysql.password)
-  [[ -z "${db_user}" ]] && db_user=$(get_ini_value "${trojan_panel_core_config_path}" mysql.user)
+  # 文件不存在就别去读，避免装 2 时 core 的 config.ini 还没生成而刷出一行报错
+  ini_get() {
+    [[ -f "$1" ]] || return 0
+    get_ini_value "$1" "$2"
+  }
+
+  [[ -z "${db_pas}" ]] && db_pas=$(ini_get "${trojan_panel_core_config_path}" mysql.password)
+  [[ -z "${db_pas}" ]] && db_pas=$(ini_get "${trojan_panel_config_path}" mysql.password)
+  [[ -z "${db_user}" ]] && db_user=$(ini_get "${trojan_panel_core_config_path}" mysql.user)
   [[ -z "${db_user}" ]] && db_user="root"
-  [[ -z "${db_port}" ]] && db_port=$(get_ini_value "${trojan_panel_core_config_path}" mysql.port)
+  [[ -z "${db_port}" ]] && db_port=$(ini_get "${trojan_panel_core_config_path}" mysql.port)
   [[ -z "${db_port}" ]] && db_port="9507"
-  [[ -z "${db_name}" ]] && db_name=$(get_ini_value "${trojan_panel_core_config_path}" mysql.database)
+  [[ -z "${db_name}" ]] && db_name=$(ini_get "${trojan_panel_core_config_path}" mysql.database)
   [[ -z "${db_name}" ]] && db_name="trojan_panel_db"
   [[ -z "${db_host}" ]] && db_host="127.0.0.1"
-  [[ -z "${grpc}" ]] && grpc=$(get_ini_value "${trojan_panel_core_config_path}" grpc.port)
+  [[ -z "${grpc}" ]] && grpc=$(ini_get "${trojan_panel_core_config_path}" grpc.port)
   [[ -z "${grpc}" ]] && grpc="8100"
 
   if [[ -z "${db_pas}" ]]; then
@@ -2013,7 +2019,6 @@ main() {
     install_reverse_proxy
     install_cert
     install_trojan_panel_core
-    register_panel_server
     ;;
   4)
     install_docker
