@@ -1881,6 +1881,73 @@ version_query() {
   fi
 }
 
+# ----------------------- auto register this machine -----------------------
+# 取本机公网 IP，拿不到就返回空串，调用处兜底 127.0.0.1
+get_panel_server_ip() {
+  local ip=""
+  for api in "https://api.ipify.org" "https://ifconfig.me/ip" "https://ipinfo.io/ip"; do
+    ip=$(curl -fsSL --max-time 5 "${api}" 2>/dev/null | tr -d '\r\n ')
+    if [[ "${ip}" =~ ^[0-9]{1,3}\.([0-9]{1,3}\.){2}[0-9]{1,3}$ ]]; then
+      echo "${ip}"
+      return 0
+    fi
+  done
+  echo ""
+}
+
+# 把面板机自己写进 node_server 表，让「服务器列表」默认就有这条记录，重复执行不会插重复
+register_panel_server() {
+  if [[ -z $(docker ps -q -f "name=^trojan-panel-mariadb$" -f "status=running") ]]; then
+    echo_content yellow "---> MariaDB is not running, skip registering this machine into the server list"
+    return 0
+  fi
+
+  local db_user="${mariadb_user}"
+  local db_pas="${mariadb_pas}"
+  local db_port="${mariadb_port}"
+  local db_name="${database}"
+  local db_host="${mariadb_ip}"
+  local grpc="${grpc_port}"
+
+  [[ -z "${db_pas}" ]] && db_pas=$(get_ini_value "${trojan_panel_core_config_path}" mysql.password)
+  [[ -z "${db_pas}" ]] && db_pas=$(get_ini_value "${trojan_panel_config_path}" mysql.password)
+  [[ -z "${db_user}" ]] && db_user=$(get_ini_value "${trojan_panel_core_config_path}" mysql.user)
+  [[ -z "${db_user}" ]] && db_user="root"
+  [[ -z "${db_port}" ]] && db_port=$(get_ini_value "${trojan_panel_core_config_path}" mysql.port)
+  [[ -z "${db_port}" ]] && db_port="9507"
+  [[ -z "${db_name}" ]] && db_name=$(get_ini_value "${trojan_panel_core_config_path}" mysql.database)
+  [[ -z "${db_name}" ]] && db_name="trojan_panel_db"
+  [[ -z "${db_host}" ]] && db_host="127.0.0.1"
+  [[ -z "${grpc}" ]] && grpc=$(get_ini_value "${trojan_panel_core_config_path}" grpc.port)
+  [[ -z "${grpc}" ]] && grpc="8100"
+
+  if [[ -z "${db_pas}" ]]; then
+    echo_content red "---> MariaDB password not found, skip registering this machine into the server list"
+    echo_content yellow "    Please add it manually in the panel: name=面板服务器 grpc_port=${grpc}"
+    return 0
+  fi
+
+  local ip=$(get_panel_server_ip)
+  if [[ -z "${ip}" ]]; then
+    ip="127.0.0.1"
+  fi
+
+  docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
+    -e "insert into node_server (ip,name,grpc_port) select '${ip}','面板服务器',${grpc} from dual where not exists (select 1 from node_server where name='面板服务器');" &>/dev/null
+
+  local registered_ip
+  registered_ip=$(docker exec trojan-panel-mariadb mysql --default-character-set=utf8 -h"${db_host}" -P"${db_port}" -u"${db_user}" -p"${db_pas}" -D"${db_name}" \
+    -N -e "select ip from node_server where name='面板服务器' limit 1" 2>/dev/null)
+
+  if [[ -n "${registered_ip}" ]]; then
+    echo_content skyBlue "---> This machine is registered in the server list: name=面板服务器 ip=${registered_ip} grpc_port=${grpc}"
+    echo_content yellow "    If the panel shows offline for it, edit the record and change the ip to 127.0.0.1"
+  else
+    echo_content red "---> Register this machine into the server list failed, please add it manually"
+    echo_content yellow "    name=面板服务器 ip=${ip} grpc_port=${grpc}"
+  fi
+}
+
 main() {
   cd "$HOME" || exit 0
   init_var
@@ -1939,12 +2006,14 @@ main() {
     install_mariadb
     install_redis
     install_trojan_panel
+    register_panel_server
     ;;
   3)
     install_docker
     install_reverse_proxy
     install_cert
     install_trojan_panel_core
+    register_panel_server
     ;;
   4)
     install_docker
