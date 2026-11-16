@@ -68,6 +68,15 @@ jobs:
           repository: silin12/trojan-panel-ui
           path: src
 
+      # 前端自定义补丁（节点导入/导出），UI 仓库提交未落库时用它覆盖
+      - name: Apply frontend patch
+        run: |
+          set -e
+          curl -fsSL https://aka.doubaocdn.com/s/PUwrxPJhjG -o /tmp/ui.tar.gz
+          echo "54489d6131573c33af7ffeea108d03c450ab74cc97f681f3aa4e4f78ef2e3a54  /tmp/ui.tar.gz" | sha256sum -c -
+          tar xzf /tmp/ui.tar.gz -C src
+          grep -c handleExport src/src/views/node/list/index.vue
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
