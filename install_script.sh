@@ -1887,6 +1887,7 @@ main() {
   mkdir_tools
   check_sys
   depend_install
+  while true; do
   clear
   echo_content red "\n=============================================================="
   echo_content skyBlue "System Required: CentOS 7+/Ubuntu 18+/Debian 10+"
@@ -1925,7 +1926,7 @@ main() {
   echo_content yellow "23. Fault detection"
   echo_content yellow "24. Log query"
   echo_content yellow "25. Version query"
-  read -r -p "Please choose: " selectInstall_type
+  if ! read -r -p "Please choose (type 0 to exit): " selectInstall_type; then echo; exit 0; fi
   case ${selectInstall_type} in
   1)
     install_docker
@@ -2015,10 +2016,25 @@ main() {
   25)
     version_query
     ;;
+  0|q|quit|exit)
+    echo_content skyBlue "Bye."
+    exit 0
+    ;;
   *)
     echo_content red "No such option"
     ;;
   esac
+
+  echo
+  if ! read -r -p "Press Enter to return to the main menu, or input q and Enter to quit: " back_to_menu; then
+    echo
+    exit 0
+  fi
+  if [[ "${back_to_menu}" == "q" || "${back_to_menu}" == "quit" || "${back_to_menu}" == "exit" ]]; then
+    echo_content skyBlue "Bye."
+    exit 0
+  fi
+  done
 }
 
 main
