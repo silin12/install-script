@@ -249,6 +249,17 @@ check_sys() {
     exit 0
   fi
 
+  # os-release based detection (preferred, distro version agnostic)
+  if [[ -z "${release}" && -f "/etc/os-release" ]]; then
+    if grep -qiE '^ID="?(ubuntu|linuxmint|pop)"?' /etc/os-release || grep -qiE '^ID_LIKE=.*(ubuntu|debian)' /etc/os-release; then
+      release="ubuntu"
+    elif grep -qiE '^ID="?(debian|raspbian)"?' /etc/os-release || grep -qiE '^ID_LIKE=.*debian' /etc/os-release; then
+      release="debian"
+    elif grep -qiE '^ID="?(centos|rocky|almalinux|fedora|rhel|ol|openeuler)"?' /etc/os-release || grep -qiE '^ID_LIKE=.*(rhel|centos|fedora)' /etc/os-release; then
+      release="centos"
+    fi
+  fi
+
   if [[ -n $(find /etc -name "redhat-release") ]] || grep </proc/version -q -i "centos"; then
     release="centos"
   elif grep </etc/issue -q -i "debian" && [[ -f "/etc/issue" ]] || grep </etc/issue -q -i "debian" && [[ -f "/proc/version" ]]; then
@@ -258,7 +269,7 @@ check_sys() {
   fi
 
   if [[ -z "${release}" ]]; then
-    echo_content red "The operating system only supports CentOS 7+/Ubuntu 18+/Debian 10+"
+    echo_content red "The operating system only supports CentOS 7+/Ubuntu 18+/Debian 10+ (could not detect distro from /etc/os-release, current release=\"${release}\")"
     exit 0
   fi
 
