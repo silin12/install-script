@@ -1,0 +1,62 @@
+name: Build UI with patch
+
+# 只重建前端镜像：检出 silin12/trojan-panel-ui，套上节点导入/导出补丁后再构建
+# 用于 UI 仓库提交还没落库时的临时方案
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ui:
+    name: trojan-panel-ui (patched)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel-ui
+          path: src
+
+      - name: Apply frontend patch
+        run: |
+          set -e
+          curl -fsSL "https://aka.doubaocdn.com/s/PUwrxPJhjG" -o /tmp/ui.tar.gz
+          echo "54489d6131573c33af7ffeea108d03c450ab74cc97f681f3aa4e4f78ef2e3a54  /tmp/ui.tar.gz" | sha256sum -c -
+          tar xzf /tmp/ui.tar.gz -C src
+          grep -c "handleExport" src/src/views/node/list/index.vue
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Build frontend
+        run: |
+          npm install -g yarn@1
+          cd src
+          yarn install --frozen-lockfile --network-timeout 600000
+          yarn build
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/silin12/trojan-panel-ui:latest
