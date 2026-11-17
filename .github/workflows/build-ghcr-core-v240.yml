@@ -6,7 +6,8 @@ name: Build GHCR core v2.4.0
 #   hysteria  1.3.4     -> v1.3.5
 #   trojan-go / naiveproxy 保持官方镜像里的版本不动
 # core 代码本身仍是官方 2.3.1 源码，版本号由我们自己标成 v2.4.0（组件版本）
-# 镜像标签：:v2.4.0 + :latest + :v1.0.2（栈版本仍是 v1.0.2，改动陆续往上叠）
+# 镜像标签：:v2.4.0 + :latest + :v1.0.3 + :v1.0.2
+# v1.0.3 起包含 REALITY minClientVer 兼容补丁（Xray>=26.7.11 默认 26.3.27，Mihomo 上报 1.8.2 会被拒）
 
 on:
   workflow_dispatch:
@@ -102,6 +103,7 @@ jobs:
           tags: |
             ghcr.io/silin12/trojan-panel-core:v2.4.0
             ghcr.io/silin12/trojan-panel-core:latest
+            ghcr.io/silin12/trojan-panel-core:v1.0.3
             ghcr.io/silin12/trojan-panel-core:v1.0.2
 
       - name: Verify versions inside the image
