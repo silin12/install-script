@@ -1,0 +1,92 @@
+name: Build UI image v1.0.3
+
+# 重建前端镜像（含服务器列表白名单状态图标 + 刷新白名单按钮）
+# 镜像标签：:v1.0.3 + :v1.0.2 + :latest
+# 顺带把 panel 后端镜像对齐出 v1.0.3（内容与 v1.0.2 相同，仅别名），
+# 这样菜单 8/9/10 用同一个 TP_IMAGE_TAG=v1.0.3 就能一次性把 ui / panel / core 全部升到位。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-ui-v103.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ui:
+    name: trojan-panel-ui v1.0.3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel-ui
+          path: src
+          ref: main
+
+      - name: Verify whitelist feature present
+        run: |
+          set -e
+          cd src
+          grep -c "handleSyncWhitelist" src/views/node-server/list/index.vue
+          grep -c "inWhitelist" src/views/node-server/list/index.vue
+          grep -c "dbGuardSync" src/lang/zh.js
+          grep -c "dbGuardSync" src/lang/en.js
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Build frontend
+        run: |
+          set -e
+          npm install -g yarn@1
+          cd src
+          yarn install --frozen-lockfile --network-timeout 600000 || yarn install --network-timeout 600000
+          yarn build
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push UI
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/silin12/trojan-panel-ui:v1.0.3
+            ghcr.io/silin12/trojan-panel-ui:v1.0.2
+            ghcr.io/silin12/trojan-panel-ui:latest
+
+  panel-alias:
+    name: trojan-panel v1.0.3 alias
+    runs-on: ubuntu-latest
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag panel v1.0.2 -> v1.0.3
+        run: |
+          set -e
+          docker pull ghcr.io/silin12/trojan-panel:v1.0.2
+          docker tag ghcr.io/silin12/trojan-panel:v1.0.2 ghcr.io/silin12/trojan-panel:v1.0.3
+          docker push ghcr.io/silin12/trojan-panel:v1.0.3
