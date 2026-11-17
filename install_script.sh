@@ -2028,68 +2028,72 @@ install_dbguard() {
   fi
 }
 
-# Network acceleration: enable BBR (system kernel) or install BBRv3 (XanMod kernel)
+# Network acceleration: install BBRv3 (XanMod kernel)
 install_bbr() {
-  echo_content green "---> Network acceleration (BBR)"
-  echo_content yellow "1. Enable BBR (current kernel, takes effect immediately, no reboot)"
-  echo_content yellow "2. Install BBRv3 kernel (XanMod, needs a reboot; node connections drop once)"
-  echo_content yellow "3. Skip"
-  local bbr_option
-  if ! read -r -p "Please select (default: 3): " bbr_option; then
+  echo_content green "---> Network acceleration: BBRv3 (XanMod kernel)"
+  echo_content yellow "This replaces the kernel and needs one reboot; node connections drop briefly."
+
+  local bbr_confirm
+  if ! read -r -p "Install BBRv3 kernel now? (y/N): " bbr_confirm; then
     return 0
   fi
-  [[ -z "${bbr_option}" ]] && bbr_option=3
+  if [[ ! "${bbr_confirm}" =~ ^[Yy] ]]; then
+    echo_content skyBlue "---> Skip BBRv3"
+    return 0
+  fi
 
-  case ${bbr_option} in
-  1)
-    modprobe tcp_bbr 2>/dev/null || true
-    echo "tcp_bbr" >/etc/modules-load.d/bbr.conf
+  if [[ ! -f /etc/debian_version ]]; then
+    echo_content red "---> Only Debian/Ubuntu is supported by this step"
+    return 0
+  fi
+
+  apt-get update -y >/dev/null 2>&1
+  apt-get install -y curl gnupg ca-certificates >/dev/null 2>&1
+
+  # XanMod 官方仓库地址在国内/香港经常被挡，默认走清华镜像，可用 XANMOD_MIRROR 覆盖
+  local xanmod_mirror="${XANMOD_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/xanmod}"
+  local os_codename
+  os_codename=$(. /etc/os-release && echo "${VERSION_CODENAME:-}")
+  [[ -z "${os_codename}" ]] && os_codename=$(lsb_release -sc 2>/dev/null)
+  if [[ -z "${os_codename}" ]]; then
+    echo_content red "---> Cannot detect the distribution codename, skip BBRv3"
+    return 0
+  fi
+
+  curl -fsSL --max-time 30 https://dl.xanmod.org/archive.key |
+    gpg --dearmor --yes -o /usr/share/keyrings/xanmod-archive-keyring.gpg || {
+    echo_content red "---> Download XanMod signing key failed, skip BBRv3"
+    return 0
+  }
+  echo "deb [signed-by=/usr/share/keyrings/xanmod-archive-keyring.gpg] ${xanmod_mirror} ${os_codename} main" \
+    >/etc/apt/sources.list.d/xanmod-release.list
+  apt-get update -y >/dev/null 2>&1
+
+  # 按 CPU 指令集选包：x86-64-v3 -> x64v3
+  local cpu_level
+  cpu_level=$(/lib64/ld-linux-x86-64.so.2 --help 2>/dev/null | grep -o 'x86-64-v[1-4]' | tail -1)
+  [[ -z "${cpu_level}" ]] && cpu_level=x86-64-v2
+  cpu_level=${cpu_level/x86-64-/x64}
+
+  local kernel_pkg
+  kernel_pkg=$(apt-cache pkgnames | grep -E '^linux-image-' | grep -F -- "-${cpu_level}-xanmod" | sort -V | tail -1)
+  if [[ -z "${kernel_pkg}" ]]; then
+    echo_content red "---> No XanMod kernel package found for ${cpu_level}, skip BBRv3"
+    return 0
+  fi
+
+  echo_content yellow "---> Installing ${kernel_pkg}"
+  if apt-get install -y "${kernel_pkg}"; then
     cat >/etc/sysctl.d/99-bbr.conf <<'EOF'
 net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=bbr
 EOF
-    sysctl --system >/dev/null 2>&1 || true
-    if [[ "$(sysctl -n net.ipv4.tcp_congestion_control 2>/dev/null)" == "bbr" ]]; then
-      echo_content skyBlue "---> BBR enabled"
-    else
-      echo_content red "---> Current kernel does not support BBR, please re-run and choose option 2 (BBRv3 kernel)"
-    fi
-    ;;
-  2)
-    if [[ ! -f /etc/debian_version ]]; then
-      echo_content red "---> Only Debian/Ubuntu is supported by this step"
-      return 0
-    fi
-
-    echo_content green "---> Installing XanMod kernel (BBRv3)"
-    apt-get update -y >/dev/null 2>&1
-    apt-get install -y curl gnupg ca-certificates >/dev/null 2>&1
-
-    curl -fsSL https://xanmod.org/gpg.key | gpg --dearmor --yes -o /usr/share/keyrings/xanmod-archive-keyring.gpg
-    echo 'deb [signed-by=/usr/share/keyrings/xanmod-archive-keyring.gpg] https://deb.xanmod.org/ releases main' >/etc/apt/sources.list.d/xanmod-release.list
-    apt-get update -y >/dev/null 2>&1
-
-    # 按 CPU 指令集选包名：x86-64-v3 -> x64v3
-    local cpu_level
-    cpu_level=$(/lib64/ld-linux-x86-64.so.2 --help 2>/dev/null | grep -o 'x86-64-v[1-4]' | tail -1)
-    [[ -z "${cpu_level}" ]] && cpu_level=x86-64-v2
-    cpu_level=${cpu_level/x86-64-/x64}
-
-    if apt-get install -y "linux-image-xanmod-${cpu_level}"; then
-      cat >/etc/sysctl.d/99-bbr.conf <<'EOF'
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-EOF
-      echo_content skyBlue "---> XanMod kernel (${cpu_level}) installed, BBRv3 takes effect after reboot"
-      echo_content yellow "---> Run 'reboot' yourself when convenient, then verify: sysctl net.ipv4.tcp_congestion_control"
-    else
-      echo_content red "---> XanMod installation failed, BBR settings unchanged"
-    fi
-    ;;
-  *)
-    echo_content skyBlue "---> Skip BBR"
-    ;;
-  esac
+    echo_content skyBlue "---> BBRv3 kernel installed: ${kernel_pkg}"
+    echo_content yellow "---> Reboot when convenient: reboot"
+    echo_content yellow "      After reboot check: uname -r && sysctl net.ipv4.tcp_congestion_control"
+  else
+    echo_content red "---> XanMod installation failed, kernel unchanged"
+  fi
 }
 
 main() {
@@ -2138,7 +2142,7 @@ main() {
   echo_content yellow "24. Log query"
   echo_content yellow "25. Version query"
   echo_content yellow "26. Install DB Guard (whitelist + firewall for 9507/6378)"
-  echo_content yellow "27. Network acceleration (BBR / BBRv3)"
+  echo_content yellow "27. Install BBRv3 kernel (XanMod)"
   if ! read -r -p "Please choose (type 0 to exit): " selectInstall_type; then echo; exit 0; fi
   case ${selectInstall_type} in
   1)
