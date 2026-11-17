@@ -1318,6 +1318,11 @@ update_trojan_panel_core_database() {
   echo_content skyBlue "---> Trojan Panel Core database structure update completed"
 }
 
+# 取容器当前实际使用的镜像全名（repo:tag），用于判断是否需要升级
+container_image() {
+  docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null
+}
+
 # Update Trojan Panel Frontend
 update_trojan_panel_ui() {
   if [[ -z $(docker ps -a -q -f "name=^trojan-panel-ui$") ]]; then
@@ -1333,7 +1338,9 @@ update_trojan_panel_ui() {
 
   echo_content yellow "Tip: The current version of the Trojan Panel Frontend (trojan-panel-ui) is ${trojan_panel_ui_current_version} the latest version is ${trojan_panel_ui_latest_version}"
 
-  if [[ "${trojan_panel_ui_current_version}" != "${trojan_panel_ui_latest_version}" ]]; then
+  running_image=$(container_image trojan-panel-ui)
+  target_image="${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}"
+  if [[ "${running_image}" != "${target_image}" ]]; then
     echo_content green "---> Update Trojan Panel Frontend"
 
     docker rm -f trojan-panel-ui &&
@@ -1371,7 +1378,9 @@ update_trojan_panel() {
 
   echo_content yellow "Tip: The current version of the Trojan Panel Backend (trojan-panel) is ${trojan_panel_current_version} The latest version is ${trojan_panel_latest_version}"
 
-  if [[ "${trojan_panel_current_version}" != "${trojan_panel_latest_version}" ]]; then
+  running_image=$(container_image trojan-panel)
+  target_image="${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG}"
+  if [[ "${running_image}" != "${target_image}" ]]; then
     echo_content green "---> Update Trojan Panel Backend"
 
     mariadb_ip=$(get_ini_value ${trojan_panel_config_path} mysql.host)
@@ -1433,7 +1442,9 @@ update_trojan_panel_core() {
 
   echo_content yellow "Tip: The current version of the Trojan Panel Core (trojan-panel-core) is ${trojan_panel_core_current_version} The latest version is ${trojan_panel_core_latest_version}"
 
-  if [[ "${trojan_panel_core_current_version}" != "${trojan_panel_core_latest_version}" ]]; then
+  running_image=$(container_image trojan-panel-core)
+  target_image="${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG}"
+  if [[ "${running_image}" != "${target_image}" ]]; then
     echo_content green "---> Update Trojan Panel Core"
 
     mariadb_ip=$(get_ini_value ${trojan_panel_core_config_path} mysql.host)
