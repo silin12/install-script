@@ -2007,6 +2007,27 @@ register_panel_server() {
   fi
 }
 
+# Install/Repair DB Guard: whitelist for 9507/6378 + panel "communication firewall" sidecar
+install_dbguard() {
+  if [[ -z $(docker ps -a -q -f "name=^trojan-panel-ui$") ]]; then
+    echo_content red "---> Please install the Trojan Panel Frontend first"
+    return 1
+  fi
+
+  echo_content green "---> Install DB Guard (whitelist + firewall for MariaDB/Redis ports)"
+  local dbguard_script=/tmp/dbguard-install.sh
+  if ! curl -fsSL --max-time 30 "https://raw.githubusercontent.com/silin12/install-script/main/dbguard-install.sh" -o ${dbguard_script}; then
+    echo_content red "---> Download dbguard-install.sh failed, please run it manually later"
+    return 1
+  fi
+
+  if bash ${dbguard_script}; then
+    echo_content skyBlue "---> DB Guard installation completed"
+  else
+    echo_content red "---> DB Guard installation fails, please run: bash ${dbguard_script}"
+  fi
+}
+
 main() {
   cd "$HOME" || exit 0
   init_var
@@ -2052,6 +2073,7 @@ main() {
   echo_content yellow "23. Fault detection"
   echo_content yellow "24. Log query"
   echo_content yellow "25. Version query"
+  echo_content yellow "26. Install DB Guard (whitelist + firewall for 9507/6378)"
   if ! read -r -p "Please choose (type 0 to exit): " selectInstall_type; then echo; exit 0; fi
   case ${selectInstall_type} in
   1)
@@ -2059,6 +2081,7 @@ main() {
     install_reverse_proxy
     install_cert
     install_trojan_panel_ui
+    install_dbguard
     ;;
   2)
     install_docker
@@ -2142,6 +2165,9 @@ main() {
     ;;
   25)
     version_query
+    ;;
+  26)
+    install_dbguard
     ;;
   0|q|quit|exit)
     echo_content skyBlue "Bye."
