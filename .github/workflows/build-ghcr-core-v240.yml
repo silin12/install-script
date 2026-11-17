@@ -67,13 +67,19 @@ jobs:
           curl -fsSL "https://github.com/apernet/hysteria/releases/download/v1.3.5/hysteria-linux-amd64" -o src/build/hysteria-linux-amd64
           chmod +x src/build/hysteria2-linux-amd64 src/build/hysteria-linux-amd64
 
+      # 注意：这里不要用 `| head -N`，管道提前关闭会让 xray 收到 SIGPIPE 返回非 0，
+      # 配上 set -e 会直接把 job 判成失败。用 sed 读完整段输出。
       - name: Print kernel versions before build
         run: |
           set -e
-          echo "== xray =="; src/build/xray-linux-amd64 version | head -3
-          echo "== hysteria v1 =="; src/build/hysteria-linux-amd64 version
-          echo "== hysteria2 =="; src/build/hysteria2-linux-amd64 version
-          echo "== trojan-go =="; src/build/trojan-go-linux-amd64 -version | head -3
+          echo "== xray =="
+          src/build/xray-linux-amd64 version 2>&1 | sed -n '1,3p'
+          echo "== hysteria v1 =="
+          src/build/hysteria-linux-amd64 version 2>&1 | sed -n '1,3p'
+          echo "== hysteria2 =="
+          src/build/hysteria2-linux-amd64 version 2>&1 | sed -n '1,3p'
+          echo "== trojan-go =="
+          src/build/trojan-go-linux-amd64 -version 2>&1 | sed -n '1,3p'
 
       - name: Setup buildx
         uses: docker/setup-buildx-action@v3
@@ -102,7 +108,7 @@ jobs:
         run: |
           set -e
           docker run --rm --entrypoint sh ghcr.io/silin12/trojan-panel-core:v2.4.0 -c '
-            /tpdata/trojan-panel-core/bin/xray/xray version | head -2
-            /tpdata/trojan-panel-core/bin/hysteria2/hysteria2 version
-            /tpdata/trojan-panel-core/bin/hysteria/hysteria version
+            /tpdata/trojan-panel-core/bin/xray/xray version 2>&1 | sed -n "1,2p"
+            /tpdata/trojan-panel-core/bin/hysteria2/hysteria2 version 2>&1 | sed -n "1,2p"
+            /tpdata/trojan-panel-core/bin/hysteria/hysteria version 2>&1 | sed -n "1,2p"
           '
