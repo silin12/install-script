@@ -1,0 +1,157 @@
+name: Build GHCR images v1.0.1
+
+# 在 GitHub 的服务器上把三个仓库各编译一遍，再把镜像推到 ghcr.io/silin12/<仓库名>:latest 和 :v1.0.1
+# 触发方式：手动点 Run workflow，或本文件被修改时自动跑一次
+# 与 v1.0.0 的差别：前端 Navbar 的「项目文档」链接改为 https://silin12.github.io/
+# 改了 trojan-panel / -ui / -core 的代码后，记得回到这里手动 Run workflow 重新构建
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-ghcr-v101.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  backend:
+    name: trojan-panel (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout backend source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel
+          path: src
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.19'
+          cache-dependency-path: src/go.sum
+
+      - name: Compile backend
+        run: |
+          mkdir -p src/build
+          cd src
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/trojan-panel-linux-amd64 .
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/silin12/trojan-panel:latest,ghcr.io/silin12/trojan-panel:v1.0.1
+
+  ui:
+    name: trojan-panel-ui (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout frontend source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel-ui
+          path: src
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Build frontend
+        run: |
+          npm install -g yarn@1
+          cd src
+          yarn install --frozen-lockfile --network-timeout 600000
+          yarn build
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/silin12/trojan-panel-ui:latest,ghcr.io/silin12/trojan-panel-ui:v1.0.1
+
+  core:
+    name: trojan-panel-core (core)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout core source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel-core
+          path: src
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+          cache-dependency-path: src/go.sum
+
+      - name: Compile core
+        run: |
+          mkdir -p src/build
+          cd src
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/trojan-panel-core-linux-amd64 .
+
+      # core 镜像里还要 xray / trojango / hysteria / naiveproxy / hysteria2 这几个内核二进制，
+      # 它们由各自项目编译，这里直接从官方镜像里取，保证和官方版本一致
+      - name: Fetch kernel binaries from official image
+        run: |
+          docker pull jonssonyan/trojan-panel-core:latest
+          cid=$(docker create jonssonyan/trojan-panel-core:latest)
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/xray/xray" src/build/xray-linux-amd64
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/trojango/trojan-go" src/build/trojan-go-linux-amd64
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/hysteria/hysteria" src/build/hysteria-linux-amd64
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/naiveproxy/naiveproxy" src/build/naiveproxy-linux-amd64
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/hysteria2/hysteria2" src/build/hysteria2-linux-amd64
+          docker rm "$cid"
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: ghcr.io/silin12/trojan-panel-core:latest,ghcr.io/silin12/trojan-panel-core:v1.0.1
