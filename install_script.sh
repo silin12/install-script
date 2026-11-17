@@ -783,9 +783,9 @@ server {
     # cache validity period
     ssl_session_timeout  5m;
     # secure link optional encryption protocol
-    ssl_protocols  TLSv1.3;
+    ssl_protocols  TLSv1.2 TLSv1.3;
     # encryption algorithm
-    ssl_ciphers  ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_ciphers  ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
     # use server-side preferred algorithm
     ssl_prefer_server_ciphers  on;
 
@@ -1051,9 +1051,9 @@ server {
     # cache validity period
     ssl_session_timeout  5m;
     # secure link optional encryption protocol
-    ssl_protocols  TLSv1.3;
+    ssl_protocols  TLSv1.2 TLSv1.3;
     # encryption algorithm
-    ssl_ciphers  ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
+    ssl_ciphers  ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;
     # use server-side preferred algorithm
     ssl_prefer_server_ciphers  on;
 
