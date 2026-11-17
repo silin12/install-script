@@ -9,11 +9,12 @@ TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
 #   TP_IMAGE_TAG=v1.0.3 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.3}
 
-# System Required: CentOS 7+/Ubuntu 18+/Debian 10+
-# Version: v2.3.2
-# Description: One click Install Trojan Panel server
+# System Required: Debian 10+/Ubuntu 18+/CentOS 7+ (auto-detected at runtime)
+# Version: images ${TP_IMAGE_REPO}:${TP_IMAGE_TAG} (ui/panel/core), latest tags read live from GHCR
+# Description: One click Install Trojan Panel server (fork maintained by silin12)
 # Author: jonssonyan <https://jonssonyan.com>
-# Github: https://github.com/trojanpanel/install-script
+# Github: https://github.com/silin12/install-script
+# Docs: https://silin12.github.io
 
 init_var() {
   ECHO_TYPE="echo -e"
@@ -101,13 +102,13 @@ init_var() {
   grpc_port=8100
   trojan_panel_core_port=8082
 
-  # Version
+  # Version (latest 由 refresh_latest_versions 实时从 GHCR 拉取)
   trojan_panel_ui_current_version=""
-  trojan_panel_ui_latest_version="v2.3.0"
+  trojan_panel_ui_latest_version="${TP_IMAGE_TAG}"
   trojan_panel_current_version=""
-  trojan_panel_latest_version="v2.3.1"
+  trojan_panel_latest_version="${TP_IMAGE_TAG}"
   trojan_panel_core_current_version=""
-  trojan_panel_core_latest_version="v2.3.1"
+  trojan_panel_core_latest_version="${TP_IMAGE_TAG}"
 
   # SQL
   sql_215="alter table account change validity_period preset_expire int unsigned default 0 not null comment '预设过期时长';alter table account add preset_quota bigint default 0 not null comment '预设配额' after preset_expire;update account set preset_quota = quota where last_login_time = 0;update account set quota = 0 where last_login_time = 0;alter table node add priority int default 100 not null comment '优先级' after port;INSERT INTO casbin_rule (p_type, v0, v1, v2, v3, v4, v5) VALUES ('p', 'sysadmin', '/api/account/clashSubscribeForSb', 'GET', 'default', 'default', 'default');alter table node_hysteria add server_name varchar(64) default '' not null comment '用于验证服务端证书的 hostname' after down_mbps;alter table node_hysteria add insecure tinyint(1) default 0 not null comment '忽略一切证书错误' after server_name;alter table node_hysteria add fast_open tinyint(1) default 0 not null comment '启用 Fast Open (降低连接建立延迟)' after insecure;"
@@ -1335,6 +1336,67 @@ container_image() {
   docker inspect -f '{{.Config.Image}}' "$1" 2>/dev/null
 }
 
+# ----------------------- version info (live) -----------------------
+TP_VER_CACHE="/tpdata/.tp_ver_cache"
+
+# 容器实际跑的镜像 tag（v1.0.3 / latest ...），容器不存在返回空
+installed_tag() {
+  local img
+  img=$(container_image "$1")
+  [[ -z "${img}" ]] && { echo ""; return 0; }
+  if [[ "${img}" == *:* ]]; then
+    echo "${img##*:}"
+  else
+    echo "latest"
+  fi
+}
+
+# 本机发行版（Debian GNU/Linux 13 (trixie) 这种）
+os_pretty_name() {
+  if [[ -f /etc/os-release ]]; then
+    ( . /etc/os-release 2>/dev/null; echo "${PRETTY_NAME:-${NAME:-unknown}}" )
+  else
+    uname -sr 2>/dev/null
+  fi
+}
+
+# 从 GHCR 公开仓库读实际发布过的最高版本 tag（也就是 8/9/10 能拉到的版本）
+ghcr_latest_tag() {
+  local repo="$1" owner token tag
+  owner="${TP_IMAGE_REPO##*/}"
+  token=$(curl -fsSL --max-time 10 "https://ghcr.io/token?scope=repository:${owner}/${repo}:pull&service=ghcr.io" 2>/dev/null |
+    grep -o '"token":"[^"]*"' | sed 's/.*:"//;s/"$//')
+  [[ -z "${token}" ]] && { echo ""; return 0; }
+  tag=$(curl -fsSL --max-time 10 -H "Authorization: Bearer ${token}" "https://ghcr.io/v2/${owner}/${repo}/tags/list" 2>/dev/null |
+    tr ',' '\n' | grep -oE '"v[0-9][^"]*"' | tr -d '"' | sort -V | tail -1)
+  echo "${tag}"
+}
+
+# 远端最新版本，1 小时缓存，离线时回落到 TP_IMAGE_TAG
+refresh_latest_versions() {
+  local now c_ui c_panel c_core c_ts
+  now=$(date +%s)
+  if [[ -f "${TP_VER_CACHE}" ]]; then
+    IFS='|' read -r c_ui c_panel c_core c_ts <"${TP_VER_CACHE}" 2>/dev/null
+  fi
+  if [[ -n "${c_ts}" && "${c_ts}" =~ ^[0-9]+$ ]] && ((now - c_ts < 3600)); then
+    trojan_panel_ui_latest_version="${c_ui:-${TP_IMAGE_TAG}}"
+    trojan_panel_latest_version="${c_panel:-${TP_IMAGE_TAG}}"
+    trojan_panel_core_latest_version="${c_core:-${TP_IMAGE_TAG}}"
+    return 0
+  fi
+
+  trojan_panel_ui_latest_version=$(ghcr_latest_tag trojan-panel-ui)
+  trojan_panel_latest_version=$(ghcr_latest_tag trojan-panel)
+  trojan_panel_core_latest_version=$(ghcr_latest_tag trojan-panel-core)
+  [[ -z "${trojan_panel_ui_latest_version}" ]] && trojan_panel_ui_latest_version="${TP_IMAGE_TAG}"
+  [[ -z "${trojan_panel_latest_version}" ]] && trojan_panel_latest_version="${TP_IMAGE_TAG}"
+  [[ -z "${trojan_panel_core_latest_version}" ]] && trojan_panel_core_latest_version="${TP_IMAGE_TAG}"
+  mkdir -p "$(dirname "${TP_VER_CACHE}")" 2>/dev/null
+  printf '%s|%s|%s|%s\n' "${trojan_panel_ui_latest_version}" "${trojan_panel_latest_version}" \
+    "${trojan_panel_core_latest_version}" "${now}" >"${TP_VER_CACHE}" 2>/dev/null
+}
+
 # Update Trojan Panel Frontend
 update_trojan_panel_ui() {
   if [[ -z $(docker ps -a -q -f "name=^trojan-panel-ui$") ]]; then
@@ -1897,17 +1959,40 @@ log_query() {
 }
 
 version_query() {
-  if [[ -n $(docker ps -a -q -f "name=^trojan-panel-ui$") && -n $(docker ps -q -f "name=^trojan-panel-ui$" -f "status=running") ]]; then
-    trojan_panel_ui_current_version=$(docker exec trojan-panel-ui cat ${TROJAN_PANEL_UI_DATA}version)
-    echo_content yellow "The current version of Trojan Panel Frontend(trojan-panel-ui) is ${trojan_panel_ui_current_version} the latest version is ${trojan_panel_ui_latest_version}"
+  refresh_latest_versions
+  local ui_tag panel_tag core_tag
+
+  ui_tag=$(installed_tag trojan-panel-ui)
+  if [[ -z "${ui_tag}" ]]; then
+    echo_content yellow "Trojan Panel Frontend(trojan-panel-ui): not installed, latest is ${trojan_panel_ui_latest_version}"
+  elif [[ "${ui_tag}" == "${trojan_panel_ui_latest_version}" ]]; then
+    echo_content skyBlue "Trojan Panel Frontend(trojan-panel-ui): ${ui_tag}, latest is ${trojan_panel_ui_latest_version} (up to date)"
+  else
+    echo_content yellow "Trojan Panel Frontend(trojan-panel-ui): ${ui_tag}, latest is ${trojan_panel_ui_latest_version} (press 8 to update)"
   fi
-  if [[ -n $(docker ps -a -q -f "name=^trojan-panel$") && -n $(docker ps -q -f "name=^trojan-panel$" -f "status=running") ]]; then
-    trojan_panel_current_version=$(docker exec trojan-panel ./trojan-panel -version)
-    echo_content yellow "The current version of Trojan Panel Backend(trojan-panel) is ${trojan_panel_current_version} the latest version is ${trojan_panel_latest_version}"
+
+  panel_tag=$(installed_tag trojan-panel)
+  if [[ -z "${panel_tag}" ]]; then
+    echo_content yellow "Trojan Panel Backend(trojan-panel): not installed, latest is ${trojan_panel_latest_version}"
+  elif [[ "${panel_tag}" == "${trojan_panel_latest_version}" ]]; then
+    echo_content skyBlue "Trojan Panel Backend(trojan-panel): ${panel_tag}, latest is ${trojan_panel_latest_version} (up to date)"
+  else
+    echo_content yellow "Trojan Panel Backend(trojan-panel): ${panel_tag}, latest is ${trojan_panel_latest_version} (press 9 to update)"
   fi
-  if [[ -n $(docker ps -a -q -f "name=^trojan-panel-core$") && -n $(docker ps -q -f "name=^trojan-panel-core$" -f "status=running") ]]; then
-    trojan_panel_core_current_version=$(docker exec trojan-panel-core ./trojan-panel-core -version)
-    echo_content yellow "The current version of Trojan Panel Core(trojan-panel-core) is ${trojan_panel_core_current_version} the latest version is ${trojan_panel_core_latest_version}"
+
+  core_tag=$(installed_tag trojan-panel-core)
+  if [[ -z "${core_tag}" ]]; then
+    echo_content yellow "Trojan Panel Core(trojan-panel-core): not installed, latest is ${trojan_panel_core_latest_version}"
+  elif [[ "${core_tag}" == "${trojan_panel_core_latest_version}" ]]; then
+    echo_content skyBlue "Trojan Panel Core(trojan-panel-core): ${core_tag}, latest is ${trojan_panel_core_latest_version} (up to date)"
+  else
+    echo_content yellow "Trojan Panel Core(trojan-panel-core): ${core_tag}, latest is ${trojan_panel_core_latest_version} (press 10 to update)"
+  fi
+
+  if [[ "${trojan_panel_ui_latest_version}" != "${TP_IMAGE_TAG}" ||
+    "${trojan_panel_latest_version}" != "${TP_IMAGE_TAG}" ||
+    "${trojan_panel_core_latest_version}" != "${TP_IMAGE_TAG}" ]]; then
+    echo_content yellow "Note: this script deploys tag ${TP_IMAGE_TAG} by default. To deploy a newer tag: TP_IMAGE_TAG=<tag> bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)"
   fi
 }
 
@@ -2102,15 +2187,21 @@ main() {
   mkdir_tools
   check_sys
   depend_install
+  refresh_latest_versions
   while true; do
   clear
+  local os_now ui_tag panel_tag core_tag
+  os_now=$(os_pretty_name)
+  ui_tag=$(installed_tag trojan-panel-ui)
+  panel_tag=$(installed_tag trojan-panel)
+  core_tag=$(installed_tag trojan-panel-core)
   echo_content red "\n=============================================================="
-  echo_content skyBlue "System Required: CentOS 7+/Ubuntu 18+/Debian 10+"
-  echo_content skyBlue "Version: v2.3.2"
-  echo_content skyBlue "Description: One click Install Trojan Panel server"
+  echo_content skyBlue "System Required: Debian 10+/Ubuntu 18+/CentOS 7+    Current: ${os_now}"
+  echo_content skyBlue "Version: ui ${ui_tag:-none} | panel ${panel_tag:-none} | core ${core_tag:-none}    Latest: ui ${trojan_panel_ui_latest_version} | panel ${trojan_panel_latest_version} | core ${trojan_panel_core_latest_version}"
+  echo_content skyBlue "Description: One click Install Trojan Panel server (fork maintained by silin12)"
   echo_content skyBlue "Author: jonssonyan <https://jonssonyan.com>"
-  echo_content skyBlue "Github: https://github.com/trojanpanel"
-  echo_content skyBlue "Docs: https://trojanpanel.github.io"
+  echo_content skyBlue "Github: https://github.com/silin12/install-script"
+  echo_content skyBlue "Docs: https://silin12.github.io"
   echo_content red "\n=============================================================="
   echo_content yellow "1. Install Trojan Panel Frontend"
   echo_content yellow "2. Install Trojan Panel Backend"
