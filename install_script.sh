@@ -5,6 +5,9 @@ export PATH
 # 镜像来源（默认官方）。想用自己账号构建的镜像，运行时加环境变量即可，例如：
 #   TP_IMAGE_REPO=ghcr.io/silin12 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_REPO=${TP_IMAGE_REPO:-jonssonyan}
+# 镜像版本标签（默认 latest）。想钉住某个版本，例如：
+#   TP_IMAGE_REPO=ghcr.io/silin12 TP_IMAGE_TAG=v1.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+TP_IMAGE_TAG=${TP_IMAGE_TAG:-latest}
 
 # System Required: CentOS 7+/Ubuntu 18+/Debian 10+
 # Version: v2.3.2
@@ -1108,12 +1111,12 @@ install_trojan_panel_ui() {
       fi
     done
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel-ui --restart always \
         --network=host \
         -v "${UI_NGINX_CONFIG}":"/etc/nginx/conf.d/default.conf" \
         -v ${CERT_PATH}:${CERT_PATH} \
-        ${TP_IMAGE_REPO}/trojan-panel-ui
+        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Frontend installation completed"
@@ -1172,7 +1175,7 @@ install_trojan_panel() {
 
     docker exec trojan-panel-redis redis-cli -h "${redis_host}" -p "${redis_port}" -a "${redis_pass}" -e "flushall" &>/dev/null
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel --restart always \
         --network=host \
         -v ${WEB_PATH}:${TROJAN_PANEL_WEBFILE} \
@@ -1188,7 +1191,7 @@ install_trojan_panel() {
         -e "redis_port=${redis_port}" \
         -e "redis_pass=${redis_pass}" \
         -e "server_port=${trojan_panel_port}" \
-        ${TP_IMAGE_REPO}/trojan-panel
+        ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Backend installation completed"
@@ -1251,7 +1254,7 @@ install_trojan_panel_core() {
 
     domain=$(cat "${DOMAIN_FILE}")
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-core &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel-core --restart always \
         --network=host \
         -v ${TROJAN_PANEL_CORE_DATA}bin/xray/config/:${TROJAN_PANEL_CORE_DATA}bin/xray/config/ \
@@ -1278,7 +1281,7 @@ install_trojan_panel_core() {
         -e "key_path=${CERT_PATH}${domain}.key" \
         -e "grpc_port=${grpc_port}" \
         -e "server_port=${trojan_panel_core_port}" \
-        ${TP_IMAGE_REPO}/trojan-panel-core
+        ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG}
     if [[ -n $(docker ps -q -f "name=^trojan-panel-core$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Core installation completed"
     else
@@ -1334,14 +1337,14 @@ update_trojan_panel_ui() {
     echo_content green "---> Update Trojan Panel Frontend"
 
     docker rm -f trojan-panel-ui &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel-ui --restart always \
         --network=host \
         -v "${UI_NGINX_CONFIG}":"/etc/nginx/conf.d/default.conf" \
         -v ${CERT_PATH}:${CERT_PATH} \
-        ${TP_IMAGE_REPO}/trojan-panel-ui
+        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Frontend update completed"
@@ -1385,9 +1388,9 @@ update_trojan_panel() {
     docker exec trojan-panel-redis redis-cli -h "${redis_host}" -p "${redis_port}" -a "${redis_pass}" -e "flushall" &>/dev/null
 
     docker rm -f trojan-panel &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG}
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel --restart always \
         --network=host \
         -v ${WEB_PATH}:${TROJAN_PANEL_WEBFILE} \
@@ -1403,7 +1406,7 @@ update_trojan_panel() {
         -e "redis_port=${redis_port}" \
         -e "redis_pass=${redis_pass}" \
         -e "server_port=${trojan_panel_port}" \
-        ${TP_IMAGE_REPO}/trojan-panel
+        ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel backend update completed"
@@ -1448,11 +1451,11 @@ update_trojan_panel_core() {
     docker exec trojan-panel-redis redis-cli -h "${redis_host}" -p "${redis_port}" -a "${redis_pass}" -e "flushall" &>/dev/null
 
     docker rm -f trojan-panel-core &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-core
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG}
 
     domain=$(cat "${DOMAIN_FILE}")
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-core &&
+    docker pull ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG} &&
       docker run -d --name trojan-panel-core --restart always \
         --network=host \
         -v ${TROJAN_PANEL_CORE_DATA}bin/xray/config/:${TROJAN_PANEL_CORE_DATA}bin/xray/config/ \
@@ -1479,7 +1482,7 @@ update_trojan_panel_core() {
         -e "key_path=${CERT_PATH}${domain}.key" \
         -e "grpc_port=${grpc_port}" \
         -e "server_port=${trojan_panel_core_port}" \
-        ${TP_IMAGE_REPO}/trojan-panel-core
+        ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-core$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Core update completed"
@@ -1553,7 +1556,7 @@ uninstall_trojan_panel_ui() {
     echo_content green "---> Uninstall Trojan Panel Frontend"
 
     docker rm -f trojan-panel-ui &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui &&
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
       rm -rf ${TROJAN_PANEL_UI_DATA}
 
     echo_content skyBlue "---> Trojan Panel Frontend uninstallation completed"
@@ -1568,7 +1571,7 @@ uninstall_trojan_panel() {
     echo_content green "---> Uninstall Trojan Panel Backend"
 
     docker rm -f trojan-panel &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel &&
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel:${TP_IMAGE_TAG} &&
       rm -rf ${TROJAN_PANEL_DATA}
 
     echo_content skyBlue "---> Trojan Panel Backend uninstallation completed"
@@ -1583,7 +1586,7 @@ uninstall_trojan_panel_core() {
     echo_content green "---> Uninstall Trojan Panel Core"
 
     docker rm -f trojan-panel-core &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-core &&
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-core:${TP_IMAGE_TAG} &&
       rm -rf ${TROJAN_PANEL_CORE_DATA}
 
     echo_content skyBlue "---> Trojan Panel Core uninstallation completed"
