@@ -2,12 +2,12 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
-# 镜像来源（默认官方）。想用自己账号构建的镜像，运行时加环境变量即可，例如：
+# 镜像来源（默认用本 fork 账号构建的镜像；要写回官方：TP_IMAGE_REPO=jonssonyan）
 #   TP_IMAGE_REPO=ghcr.io/silin12 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
-TP_IMAGE_REPO=${TP_IMAGE_REPO:-jonssonyan}
-# 镜像版本标签（默认 latest）。想钉住某个版本，例如：
-#   TP_IMAGE_REPO=ghcr.io/silin12 TP_IMAGE_TAG=v1.0.0 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
-TP_IMAGE_TAG=${TP_IMAGE_TAG:-latest}
+TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
+# 镜像版本标签（默认 v1.0.3：ui / panel / core 三件套都有该 tag，菜单 8/9/10 一键升级即可全升到位）
+#   TP_IMAGE_TAG=v1.0.3 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.3}
 
 # System Required: CentOS 7+/Ubuntu 18+/Debian 10+
 # Version: v2.3.2
