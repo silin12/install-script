@@ -1,0 +1,30 @@
+name: sync-8
+
+on: workflow_dispatch
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Fetch payload
+        run: |
+          set -e
+          curl -fsSL "https://aka.doubaocdn.com/s/CzDV8fYabW" -o /tmp/payload.tar.gz
+          echo "1fc37babf3ef5246fad3e791aa73bb3f96bb4e264fba729e61816781f5cfeb5f  /tmp/payload.tar.gz" | sha256sum -c -
+          tar xzf /tmp/payload.tar.gz -C .
+          git status --porcelain
+      - name: Commit and push
+        run: |
+          set -e
+          git config user.name "silin12"
+          git config user.email "silin12@users.noreply.github.com"
+          git add -A
+          git commit -m "fix(nginx): allow TLSv1.2 so .NET clients can fetch subscriptions" || echo "nothing to commit"
+          git push origin HEAD:main
