@@ -1,0 +1,108 @@
+name: Build GHCR core v2.4.0
+
+# 只重建 trojan-panel-core，把内核换新：
+#   xray     1.8.4      -> v26.7.28   （XTLS/Xray-core，社区包）
+#   hysteria2 2.0.4     -> v2.14.0
+#   hysteria  1.3.4     -> v1.3.5
+#   trojan-go / naiveproxy 保持官方镜像里的版本不动
+# core 代码本身仍是官方 2.3.1 源码，版本号由我们自己标成 v2.4.0（组件版本）
+# 镜像标签：:v2.4.0 + :latest + :v1.0.2（栈版本仍是 v1.0.2，改动陆续往上叠）
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-ghcr-core-v240.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  core:
+    name: trojan-panel-core (core v2.4.0)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout core source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel-core
+          path: src
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.20'
+          cache-dependency-path: src/go.sum
+
+      - name: Compile core
+        run: |
+          set -e
+          mkdir -p src/build
+          cd src
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/trojan-panel-core-linux-amd64 .
+
+      - name: Fetch unchanged kernels from official image
+        run: |
+          set -e
+          docker pull jonssonyan/trojan-panel-core:latest
+          cid=$(docker create jonssonyan/trojan-panel-core:latest)
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/trojango/trojan-go" src/build/trojan-go-linux-amd64
+          docker cp "$cid:/tpdata/trojan-panel-core/bin/naiveproxy/naiveproxy" src/build/naiveproxy-linux-amd64
+          docker rm "$cid"
+
+      - name: Fetch xray v26.7.28
+        run: |
+          set -e
+          curl -fsSL "https://github.com/XTLS/Xray-core/releases/download/v26.7.28/Xray-linux-64.zip" -o /tmp/xray.zip
+          unzip -o /tmp/xray.zip -d /tmp/xray
+          cp /tmp/xray/xray src/build/xray-linux-amd64
+          chmod +x src/build/xray-linux-amd64
+
+      - name: Fetch hysteria2 v2.14.0 and hysteria v1.3.5
+        run: |
+          set -e
+          curl -fsSL "https://github.com/apernet/hysteria/releases/download/app/v2.14.0/hysteria-linux-amd64" -o src/build/hysteria2-linux-amd64
+          curl -fsSL "https://github.com/apernet/hysteria/releases/download/v1.3.5/hysteria-linux-amd64" -o src/build/hysteria-linux-amd64
+          chmod +x src/build/hysteria2-linux-amd64 src/build/hysteria-linux-amd64
+
+      - name: Print kernel versions before build
+        run: |
+          set -e
+          echo "== xray =="; src/build/xray-linux-amd64 version | head -3
+          echo "== hysteria v1 =="; src/build/hysteria-linux-amd64 version
+          echo "== hysteria2 =="; src/build/hysteria2-linux-amd64 version
+          echo "== trojan-go =="; src/build/trojan-go-linux-amd64 -version | head -3
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/silin12/trojan-panel-core:v2.4.0
+            ghcr.io/silin12/trojan-panel-core:latest
+            ghcr.io/silin12/trojan-panel-core:v1.0.2
+
+      - name: Verify versions inside the image
+        run: |
+          set -e
+          docker run --rm --entrypoint sh ghcr.io/silin12/trojan-panel-core:v2.4.0 -c '
+            /tpdata/trojan-panel-core/bin/xray/xray version | head -2
+            /tpdata/trojan-panel-core/bin/hysteria2/hysteria2 version
+            /tpdata/trojan-panel-core/bin/hysteria/hysteria version
+          '
