@@ -2,7 +2,7 @@
 PATH=/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin:~/bin
 export PATH
 
-# 镜像来源（默认用本 fork 账号构建的镜像；要写回官方：TP_IMAGE_REPO=jonssonyan）
+# 镜像来源（默认用本 fork 账号构建的镜像；写回官方：TP_IMAGE_REPO=jonssonyan）
 #   TP_IMAGE_REPO=ghcr.io/silin12 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
 # 镜像版本标签（默认 v1.0.3：ui / panel / core 三件套都有该 tag，菜单 8/9/10 一键升级即可全升到位）
@@ -1030,6 +1030,12 @@ server {
         proxy_pass http://${trojan_panel_ip}:${trojan_panel_server_port};
     }
 
+    # 通讯防火墙/白名单 sidecar（由 dbguard-install.sh 在本机 127.0.0.1:8899 提供）
+    location /dbguard/ {
+        proxy_pass http://127.0.0.1:8899/;
+        proxy_read_timeout 30s;
+    }
+
     error_page  497               http://\$host:${trojan_panel_ui_port}\$request_uri;
 
     error_page   500 502 503 504  /50x.html;
@@ -1069,6 +1075,12 @@ server {
 
     location /api {
         proxy_pass http://${trojan_panel_ip}:${trojan_panel_server_port};
+    }
+
+    # 通讯防火墙/白名单 sidecar（由 dbguard-install.sh 在本机 127.0.0.1:8899 提供）
+    location /dbguard/ {
+        proxy_pass http://127.0.0.1:8899/;
+        proxy_read_timeout 30s;
     }
 
     #error_page  404              /404.html;
