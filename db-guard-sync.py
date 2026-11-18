@@ -12,8 +12,12 @@ import time
 
 DB_CONTAINER = "trojan-panel-mariadb"
 DB_USER = "root"
-DB_PASS = "05320532"
 DB_NAME = "trojan_panel_db"
+# 密码不再写死：优先从面板后端 / core 容器环境变量 mariadb_pas 实时读取，
+# 与面板使用同一份凭据，避免改库密码后白名单同步 1045；都取不到才回退兜底值。
+PANEL_CONTAINERS = ("trojan-panel", "trojan-panel-core")
+ENV_PASS_KEY = "mariadb_pas"
+DB_PASS_FALLBACK = "05320532"
 OUT4 = "/etc/db-guard.allow.auto"
 OUT6 = "/etc/db-guard.allow6.auto"
 LOG = "/var/log/db-guard-sync.log"
@@ -39,8 +43,33 @@ def log(msg):
     print(line)
 
 
+def _inspect_env(container, key):
+    try:
+        p = subprocess.run(
+            ["docker", "inspect", container,
+             "--format", "{{range .Config.Env}}{{println .}}{{end}}"],
+            capture_output=True, timeout=15)
+        if p.returncode != 0:
+            return None
+        for line in p.stdout.decode("utf-8", "replace").splitlines():
+            if line.startswith(key + "="):
+                return line.split("=", 1)[1].strip()
+    except Exception:
+        return None
+    return None
+
+
+def get_db_pass():
+    for c in PANEL_CONTAINERS:
+        v = _inspect_env(c, ENV_PASS_KEY)
+        if v:
+            return v
+    return DB_PASS_FALLBACK
+
+
 def query_ips():
-    cmd = ["docker", "exec", DB_CONTAINER, "mysql", "-u" + DB_USER, "-p" + DB_PASS,
+    db_pass = get_db_pass()
+    cmd = ["docker", "exec", DB_CONTAINER, "mysql", "-u" + DB_USER, "-p" + db_pass,
            "-N", "-B", "-e", SQL]
     p = subprocess.run(cmd, capture_output=True, timeout=30)
     if p.returncode != 0:
