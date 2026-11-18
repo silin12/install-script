@@ -5,9 +5,9 @@ export PATH
 # 镜像来源（默认用本 fork 账号构建的镜像；写回官方：TP_IMAGE_REPO=jonssonyan）
 #   TP_IMAGE_REPO=ghcr.io/silin12 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
-# 镜像版本标签（默认 v1.0.3：ui / panel / core 三件套都有该 tag，菜单 8/9/10 一键升级即可全升到位）
-#   TP_IMAGE_TAG=v1.0.3 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
-TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.3}
+# 镜像版本标签（默认 v1.0.4：ui / panel / core 三件套都有该 tag，菜单 8/9/10 一键升级即可全升到位）
+#   TP_IMAGE_TAG=v1.0.4 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.4}
 
 # System Required: Debian 10+/Ubuntu 18+/CentOS 7+ (auto-detected at runtime)
 # Version: images ${TP_IMAGE_REPO}:${TP_IMAGE_TAG} (ui/panel/core), latest tags read live from GHCR
@@ -1339,7 +1339,7 @@ container_image() {
 # ----------------------- version info (live) -----------------------
 TP_VER_CACHE="/tpdata/.tp_ver_cache"
 
-# 容器实际跑的镜像 tag（v1.0.3 / latest ...），容器不存在返回空
+# 容器实际跑的镜像 tag（v1.0.4 / latest ...），容器不存在返回空
 installed_tag() {
   local img
   img=$(container_image "$1")

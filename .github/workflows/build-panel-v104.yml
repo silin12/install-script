@@ -1,0 +1,103 @@
+name: Build panel v1.0.4
+
+# 重建后端镜像（订阅链接改回旧格式 /api/auth/subscribe/<base64url(pass)>）：
+#   - ClashSubscribe / ClashSubscribeForSb 返回旧格式链接，只依赖连接密码 pass，
+#     换机迁移面板后订阅链接不变，客户端零改动。
+#   - 短链 /api/s/:code 路由保留，历史短链仍可解析；Subscribe 解码同时兼容
+#     URL-safe base64 与标准 base64。
+# 镜像标签：
+#   panel: v1.0.4 + latest（本次真实 Go 编译）
+#   ui / core: v1.0.4 由 v1.0.3 别名 retag（本轮无代码改动），
+#   这样菜单 8/9/10 用同一个 TP_IMAGE_TAG=v1.0.4 即可一次性全升到位。
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-panel-v104.yml'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  panel:
+    name: trojan-panel v1.0.4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout backend source
+        uses: actions/checkout@v4
+        with:
+          repository: silin12/trojan-panel
+          path: src
+          ref: main
+
+      - name: Verify legacy subscribe link present
+        run: |
+          set -e
+          cd src
+          grep -c "subscribeLegacyLink" api/subscribe.go
+          grep -c "/api/auth/subscribe/{{TOKEN}}" model/constant/subscribe_page.go
+          grep -c "decodeSubscribeToken" api/subscribe.go
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+          cache-dependency-path: src/go.sum
+
+      - name: Compile backend
+        run: |
+          set -e
+          mkdir -p src/build
+          cd src
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o build/trojan-panel-linux-amd64 .
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push panel
+        uses: docker/build-push-action@v6
+        with:
+          context: src
+          file: src/Dockerfile
+          platforms: linux/amd64
+          push: true
+          provenance: false
+          tags: |
+            ghcr.io/silin12/trojan-panel:v1.0.4
+            ghcr.io/silin12/trojan-panel:latest
+
+  alias-ui-core:
+    name: alias ui / core v1.0.4
+    runs-on: ubuntu-latest
+    needs: panel
+    steps:
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag ui v1.0.3 -> v1.0.4
+        run: |
+          set -e
+          docker pull ghcr.io/silin12/trojan-panel-ui:v1.0.3
+          docker tag ghcr.io/silin12/trojan-panel-ui:v1.0.3 ghcr.io/silin12/trojan-panel-ui:v1.0.4
+          docker push ghcr.io/silin12/trojan-panel-ui:v1.0.4
+
+      - name: Retag core v1.0.3 -> v1.0.4
+        run: |
+          set -e
+          docker pull ghcr.io/silin12/trojan-panel-core:v1.0.3
+          docker tag ghcr.io/silin12/trojan-panel-core:v1.0.3 ghcr.io/silin12/trojan-panel-core:v1.0.4
+          docker push ghcr.io/silin12/trojan-panel-core:v1.0.4
