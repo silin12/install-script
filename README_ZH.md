@@ -31,21 +31,43 @@ CPU: linux/amd64 / linux/arm/v6 / linux/arm/v7 / linux/arm64 / linux/s390x / lin
 
 内存: ≥ 1G
 
+## 本仓库说明
+
+- 镜像与面板三件套由 `ghcr.io/silin12` 构建，默认标签 `v1.0.4`
+- 安装脚本入口：`https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh`
+- 详细更新记录见 [CHANGELOG.md](CHANGELOG.md)
+
 ## 安装
 
-- 联机（推荐）
+- 联机（推荐，默认使用 ghcr.io/silin12 + v1.0.4）
 
     ```shell
-    source <(curl -L https://github.com/trojanpanel/install-script/raw/main/install_script.sh)
+    bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+    ```
+
+- 指定镜像来源与标签
+
+    ```shell
+    TP_IMAGE_REPO=ghcr.io/silin12 TP_IMAGE_TAG=v1.0.4 \
+    bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
     ```
 
 - 单机
 
     ```shell
-    source <(curl -L https://github.com/trojanpanel/install-script/raw/main/install_script_standalone.sh)
+    source <(curl -L https://github.com/silin12/install-script/raw/main/install_script_standalone.sh)
     ```
 
 - [安装旧版本](README_ARCHIVE_ZH.md)
+
+### 安装顺序
+
+| 角色 | 菜单项 | 说明 |
+| --- | --- | --- |
+| 面板机 | 1 → 2 → 3 | 1 前端（含 Docker / 反代 / 证书 / DB Guard），2 后端，3 Core |
+| 节点子机 | 仅 3 | 只装 Core，连接面板机 |
+
+> 菜单 6（MariaDB）、7（Redis）已被 2 包含，无需单独安装。
 
 ## 其他
 
@@ -59,7 +81,7 @@ You can subscribe to my channel on YouTube: https://www.youtube.com/@jonssonyan
 
 ## 更新日志
 
-访问 [https://trojanpanel.github.io/change/change-log.html](https://trojanpanel.github.io/change/change-log.html) 查看完整日志
+见 [CHANGELOG.md](CHANGELOG.md)（含 v1.0.4 安装脚本、订阅格式、白名单状态列、DB Guard 动态密码、BBRv3 等改动）
 
 ## 报告缺陷与问题
 

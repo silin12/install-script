@@ -35,21 +35,43 @@ CPU: linux/amd64 / linux/arm/v6 / linux/arm/v7 / linux/arm64 / linux/s390x / lin
 
 Memory: ≥ 1G
 
+## About this fork
+
+- Images and the three panel services are built under `ghcr.io/silin12`, default tag `v1.0.4`
+- Install entry: `https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh`
+- Full change log: [CHANGELOG.md](CHANGELOG.md)
+
 ## Installation
 
-- Online(recommended)
+- Online (recommended, defaults to ghcr.io/silin12 + v1.0.4)
 
     ```shell
-    source <(curl -L https://github.com/trojanpanel/install-script/raw/main/install_script.sh)
+    bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+    ```
+
+- With explicit image repo and tag
+
+    ```shell
+    TP_IMAGE_REPO=ghcr.io/silin12 TP_IMAGE_TAG=v1.0.4 \
+    bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
     ```
 
 - Standalone
 
     ```shell
-    source <(curl -L https://github.com/trojanpanel/install-script/raw/main/install_script_standalone.sh)
+    source <(curl -L https://github.com/silin12/install-script/raw/main/install_script_standalone.sh)
     ```
 
 - [Install old version](README_ARCHIVE.md)
+
+### Installation order
+
+| Role | Menu items | Notes |
+| --- | --- | --- |
+| Panel host | 1 → 2 → 3 | 1 frontend (includes Docker / reverse proxy / cert / DB Guard), 2 backend, 3 core |
+| Node host | 3 only | Core only, to attach to the panel host |
+
+> Menu 6 (MariaDB) and 7 (Redis) are already covered by item 2.
 
 ## Other
 
@@ -63,7 +85,7 @@ Visit [https://trojanpanel.github.io](https://trojanpanel.github.io) to view the
 
 ## Change Log
 
-Visit [https://trojanpanel.github.io/change/change-log.html](https://trojanpanel.github.io/change/change-log.html) to view the full log
+See [CHANGELOG.md](CHANGELOG.md) — covers the v1.0.4 install script, legacy subscribe links, the whitelist status column, DB Guard dynamic password, BBRv3 and more.
 
 ## Bugs & Issues
 
