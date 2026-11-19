@@ -11,14 +11,26 @@
 
 ## v1.0.4（2026-11-19）
 
-### 一键安装脚本
+### 一键安装脚本（盲选，推荐）
+
+不用记版本号，脚本自己去 GHCR 取本 fork 已发布的最高版本（当前为 `v1.0.4`）：
+
+```bash
+TP_IMAGE_TAG=auto bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+```
+
+- `auto` 与 `latest` 等价，只在本系列 `v1.0.x` 内取最高 tag
+- 读不到时自动回退 `v1.0.4`，不会中断安装
+- 只用一条命令，升级老机器也是它（菜单照样进 8 / 9 / 10）
+
+### 固定版本安装
 
 ```bash
 TP_IMAGE_REPO=ghcr.io/silin12 TP_IMAGE_TAG=v1.0.4 \
 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 ```
 
-不写环境变量时，脚本默认就是 `ghcr.io/silin12` + `v1.0.4`，可直接运行：
+不写环境变量时默认就是 `ghcr.io/silin12` + `v1.0.4`：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
@@ -50,6 +62,9 @@ bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/
 5. **菜单 25「版本查询」改为实时读取**：同时显示 GHCR 最新 tag 与已安装镜像的实际 tag，不再写死。
 6. **菜单 27「安装 BBRv3 内核」**：使用 XanMod 内核，走清华镜像源；不再提供 BBRv1。
 7. **通讯防火墙范围**：仅管控 **MariaDB 9507 / Redis 6378** 两个内部端口，面板 UI 8888 与节点端口不受影响。
+8. **新增盲选安装 + 修正版本误判**：
+   - 支持 `TP_IMAGE_TAG=auto`（等同 `latest`），安装时自动取本系列最高 tag。
+   - 修复菜单 25「版本查询」把 GHCR 上的上游 `v2.4.0` 误判为最新、导致提示升级到不兼容版本的问题；现在只认 `v1.0.x` 系列，与已装 `v1.0.4` 一致。
 
 ### 升级方式
 

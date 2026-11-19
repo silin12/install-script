@@ -43,7 +43,13 @@ Memory: ≥ 1G
 
 ## Installation
 
-- Online (recommended, defaults to ghcr.io/silin12 + v1.0.4)
+- Online (recommended, auto-picks the latest version)
+
+    ```shell
+    TP_IMAGE_TAG=auto bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+    ```
+
+- Default (ghcr.io/silin12 + v1.0.4)
 
     ```shell
     bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)

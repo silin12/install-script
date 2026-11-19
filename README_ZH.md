@@ -39,7 +39,13 @@ CPU: linux/amd64 / linux/arm/v6 / linux/arm/v7 / linux/arm64 / linux/s390x / lin
 
 ## 安装
 
-- 联机（推荐，默认使用 ghcr.io/silin12 + v1.0.4）
+- 联机（推荐，盲选最新版本，不用记版本号）
+
+    ```shell
+    TP_IMAGE_TAG=auto bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+    ```
+
+- 默认版本（ghcr.io/silin12 + v1.0.4）
 
     ```shell
     bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)

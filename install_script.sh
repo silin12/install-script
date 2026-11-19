@@ -7,6 +7,8 @@ export PATH
 TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
 # 镜像版本标签（默认 v1.0.4：ui / panel / core 三件套都有该 tag，菜单 8/9/10 一键升级即可全升到位）
 #   TP_IMAGE_TAG=v1.0.4 bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
+# 盲选（不用记版本号，自动装 GHCR 上已发布的最高版本）：
+#   TP_IMAGE_TAG=auto bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.4}
 
 # System Required: Debian 10+/Ubuntu 18+/CentOS 7+ (auto-detected at runtime)
@@ -1361,16 +1363,36 @@ os_pretty_name() {
 }
 
 # 从 GHCR 公开仓库读实际发布过的最高版本 tag（也就是 8/9/10 能拉到的版本）
+# 只认本 fork 的版本系列（默认 v1.0.），避免拿到上游的 v2.x 等 tag
 ghcr_latest_tag() {
-  local repo="$1" owner token tag
+  local repo="$1" owner token tag pattern
   owner="${TP_IMAGE_REPO##*/}"
+  pattern="${TP_TAG_FILTER:-v1.0.}"
   token=$(curl -fsSL --max-time 10 "https://ghcr.io/token?scope=repository:${owner}/${repo}:pull&service=ghcr.io" 2>/dev/null |
     grep -o '"token":"[^"]*"' | sed 's/.*:"//;s/"$//')
   [[ -z "${token}" ]] && { echo ""; return 0; }
   tag=$(curl -fsSL --max-time 10 -H "Authorization: Bearer ${token}" "https://ghcr.io/v2/${owner}/${repo}/tags/list" 2>/dev/null |
-    tr ',' '\n' | grep -oE '"v[0-9][^"]*"' | tr -d '"' | sort -V | tail -1)
+    tr ',' '\n' | grep -oE '"v[0-9][^"]*"' | tr -d '"' | awk -v p="${pattern}" 'index($0,p)==1' | sort -V | tail -1)
   echo "${tag}"
 }
+
+# TP_IMAGE_TAG=auto / latest 时，自动取 GHCR 上已发布的最高版本，免去手动记版本号
+resolve_auto_image_tag() {
+  [[ "${TP_IMAGE_TAG}" == "auto" || "${TP_IMAGE_TAG}" == "latest" ]] || return 0
+  local t
+  t=$(ghcr_latest_tag trojan-panel-core)
+  [[ -z "${t}" ]] && t=$(ghcr_latest_tag trojan-panel)
+  [[ -z "${t}" ]] && t=$(ghcr_latest_tag trojan-panel-ui)
+  if [[ -z "${t}" ]]; then
+    echo_content red "无法从 GHCR 读取最新版本，已回退到默认标签 v1.0.4"
+    t="v1.0.4"
+  fi
+  TP_IMAGE_TAG="${t}"
+  export TP_IMAGE_TAG
+  echo_content skyBlue "已自动选择镜像版本：${TP_IMAGE_REPO} / ${TP_IMAGE_TAG}"
+}
+
+resolve_auto_image_tag
 
 # 远端最新版本，1 小时缓存，离线时回落到 TP_IMAGE_TAG
 refresh_latest_versions() {
