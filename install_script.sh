@@ -1562,10 +1562,8 @@ update_trojan_panel_ui() {
   if [[ "${running_image}" != "${target_image}" ]]; then
     echo_content green "---> Update Trojan Panel Frontend"
 
-    docker rm -f trojan-panel-ui
-    docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG} >/dev/null 2>&1
-
     ui_pull_or_local &&
+      docker rm -f trojan-panel-ui &&
       docker run -d --name trojan-panel-ui --restart always \
         --network=host \
         -v "${UI_NGINX_CONFIG}":"/etc/nginx/conf.d/default.conf" \
