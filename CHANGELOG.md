@@ -77,6 +77,13 @@ bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/
 
 已经装过 DB Guard 的机器，需要重新执行一次菜单 26，让同步脚本换成动态读取密码的版本。
 
+### v1.0.4 追加（2026-11-20）
+
+- 前端镜像标签独立为 `TP_UI_IMAGE_TAG`（默认 `v1.0.10`），panel / core 仍用 `TP_IMAGE_TAG`（`v1.0.4`）；GHCR 拉不到时先用本机同 tag，再退 `TP_IMAGE_TAG`。
+- nginx 两套模板新增 `/backup/`（上传 200m、超时 1800s）与 `/backup-pull/`（反代 8898）反代。
+- 新增 `install_tp_backup`：安装 `tpbackup-api.py` + systemd `tpbackup-api`，装前端时自动执行；菜单 28 可单独安装/更新。
+- 前端升级改为先拉镜像再删容器，避免回退时本地镜像已被删掉。
+
 ---
 
 ## 历史版本
