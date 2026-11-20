@@ -10,9 +10,12 @@ TP_IMAGE_REPO=${TP_IMAGE_REPO:-ghcr.io/silin12}
 # 盲选（不用记版本号，自动装 GHCR 上已发布的最高版本）：
 #   TP_IMAGE_TAG=auto bash <(curl -fsSL https://raw.githubusercontent.com/silin12/install-script/main/install_script.sh)
 TP_IMAGE_TAG=${TP_IMAGE_TAG:-v1.0.4}
+# 前端镜像单独版本（前端功能（定时备份/恢复等）只在 v1.0.10+ 里，后端/内核仍用 TP_IMAGE_TAG）
+#   拉取失败时会自动回落到本机已存在的同 tag 镜像，再不行才退回 TP_IMAGE_TAG
+TP_UI_IMAGE_TAG=${TP_UI_IMAGE_TAG:-v1.0.10}
 
 # System Required: Debian 10+/Ubuntu 18+/CentOS 7+ (auto-detected at runtime)
-# Version: images ${TP_IMAGE_REPO}:${TP_IMAGE_TAG} (ui/panel/core), latest tags read live from GHCR
+# Version: images ${TP_IMAGE_REPO}:${TP_IMAGE_TAG} (panel/core), frontend ${TP_UI_IMAGE_TAG}; latest tags read live from GHCR
 # Description: One click Install Trojan Panel server (fork maintained by silin12)
 # Author: jonssonyan <https://jonssonyan.com>
 # Github: https://github.com/silin12/install-script
@@ -1039,6 +1042,20 @@ server {
         proxy_read_timeout 30s;
     }
 
+    # 定时备份 sidecar（本机 127.0.0.1:8898）
+    location /backup/ {
+        proxy_pass http://127.0.0.1:8898/;
+        client_max_body_size 200m;
+        proxy_request_buffering off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    location /backup-pull/ {
+        proxy_pass http://127.0.0.1:8898/pull/;
+        proxy_read_timeout 300s;
+    }
+
     error_page  497               http://\$host:${trojan_panel_ui_port}\$request_uri;
 
     error_page   500 502 503 504  /50x.html;
@@ -1086,6 +1103,20 @@ server {
         proxy_read_timeout 30s;
     }
 
+    # 定时备份 sidecar（本机 127.0.0.1:8898）
+    location /backup/ {
+        proxy_pass http://127.0.0.1:8898/;
+        client_max_body_size 200m;
+        proxy_request_buffering off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    location /backup-pull/ {
+        proxy_pass http://127.0.0.1:8898/pull/;
+        proxy_read_timeout 300s;
+    }
+
     #error_page  404              /404.html;
     #497 http->https
     error_page  497               https://\$host:${trojan_panel_ui_port}\$request_uri;
@@ -1098,6 +1129,21 @@ server {
     }
 }
 EOF
+}
+
+# 拉前端镜像：GHCR 拉不到就用手上已有的同 tag，最后才回落到 TP_IMAGE_TAG
+ui_pull_or_local() {
+  if docker pull "${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}" >/dev/null 2>&1; then
+    echo_content skyBlue "---> Frontend image ${TP_UI_IMAGE_TAG} pulled"
+    return 0
+  fi
+  if docker image inspect "${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}" >/dev/null 2>&1; then
+    echo_content yellow "---> Pull ${TP_UI_IMAGE_TAG} failed, using the local image"
+    return 0
+  fi
+  echo_content red "---> ${TP_UI_IMAGE_TAG} not available on GHCR and no local copy, fallback to ${TP_IMAGE_TAG}"
+  TP_UI_IMAGE_TAG="${TP_IMAGE_TAG}"
+  docker pull "${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}" >/dev/null 2>&1
 }
 
 # Install Trojan Panel Frontend
@@ -1126,12 +1172,12 @@ install_trojan_panel_ui() {
       fi
     done
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
+    ui_pull_or_local &&
       docker run -d --name trojan-panel-ui --restart always \
         --network=host \
         -v "${UI_NGINX_CONFIG}":"/etc/nginx/conf.d/default.conf" \
         -v ${CERT_PATH}:${CERT_PATH} \
-        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
+        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Frontend installation completed"
@@ -1149,6 +1195,83 @@ install_trojan_panel_ui() {
     fi
   else
     echo_content skyBlue "---> You have installed the Trojan Panel Frontend"
+  fi
+}
+
+# 升级已有面板的 nginx，补上 /backup、/backup-pull（老装法里没有）
+ui_ensure_backup_proxy() {
+  [[ -f "${UI_NGINX_CONFIG}" ]] || return 0
+  grep -q "location /backup/" "${UI_NGINX_CONFIG}" && return 0
+  python3 - "${UI_NGINX_CONFIG}" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+blk = """    # 定时备份 sidecar（本机 127.0.0.1:8898）
+    location /backup/ {
+        proxy_pass http://127.0.0.1:8898/;
+        client_max_body_size 200m;
+        proxy_request_buffering off;
+        proxy_read_timeout 1800s;
+        proxy_send_timeout 1800s;
+    }
+
+    location /backup-pull/ {
+        proxy_pass http://127.0.0.1:8898/pull/;
+        proxy_read_timeout 300s;
+    }
+
+"""
+i = s.find("    error_page  497")
+if i > 0:
+    s = s[:i] + blk + s[i:]
+    open(p, "w").write(s)
+PY
+  docker exec trojan-panel-ui nginx -s reload >/dev/null 2>&1 || true
+}
+
+# 安装/更新定时备份 sidecar（127.0.0.1:8898，nginx /backup/ 反代）
+install_tp_backup() {
+  echo_content green "---> Install backup sidecar (定时备份 / 数据库恢复)"
+  local target=/usr/local/sbin/tpbackup-api.py
+  if ! curl -fsSL --max-time 30 "https://raw.githubusercontent.com/silin12/install-script/main/tpbackup-api.py" -o "${target}.new"; then
+    echo_content red "---> Download tpbackup-api.py failed, please retry later"
+    return 1
+  fi
+  if ! python3 -m py_compile "${target}.new"; then
+    echo_content red "---> tpbackup-api.py syntax check failed, aborted"
+    rm -f "${target}.new"
+    return 1
+  fi
+  install -m 755 "${target}.new" "${target}"
+  rm -f "${target}.new"
+  mkdir -p /tpdata/backup/daily
+
+  cat >/etc/systemd/system/tpbackup-api.service <<'EOF'
+[Unit]
+Description=Trojan Panel backup sidecar (127.0.0.1:8898)
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/sbin/tpbackup-api.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable tpbackup-api >/dev/null 2>&1
+  systemctl restart tpbackup-api
+  sleep 1
+  if systemctl is-active --quiet tpbackup-api; then
+    echo_content skyBlue "---> Backup sidecar running on 127.0.0.1:8898 (panel: 系统设置 → 基础设置 → 定时备份)"
+    ui_ensure_backup_proxy
+  else
+    echo_content red "---> Backup sidecar failed to start, check: journalctl -u tpbackup-api -n 50"
+    return 1
   fi
 }
 
@@ -1435,19 +1558,19 @@ update_trojan_panel_ui() {
   echo_content yellow "Tip: The current version of the Trojan Panel Frontend (trojan-panel-ui) is ${trojan_panel_ui_current_version} the latest version is ${trojan_panel_ui_latest_version}"
 
   running_image=$(container_image trojan-panel-ui)
-  target_image="${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}"
+  target_image="${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}"
   if [[ "${running_image}" != "${target_image}" ]]; then
     echo_content green "---> Update Trojan Panel Frontend"
 
-    docker rm -f trojan-panel-ui &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
+    docker rm -f trojan-panel-ui
+    docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG} >/dev/null 2>&1
 
-    docker pull ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
+    ui_pull_or_local &&
       docker run -d --name trojan-panel-ui --restart always \
         --network=host \
         -v "${UI_NGINX_CONFIG}":"/etc/nginx/conf.d/default.conf" \
         -v ${CERT_PATH}:${CERT_PATH} \
-        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG}
+        ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG}
 
     if [[ -n $(docker ps -q -f "name=^trojan-panel-ui$" -f "status=running") ]]; then
       echo_content skyBlue "---> Trojan Panel Frontend update completed"
@@ -1663,7 +1786,7 @@ uninstall_trojan_panel_ui() {
     echo_content green "---> Uninstall Trojan Panel Frontend"
 
     docker rm -f trojan-panel-ui &&
-      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_IMAGE_TAG} &&
+      docker rmi -f ${TP_IMAGE_REPO}/trojan-panel-ui:${TP_UI_IMAGE_TAG} &&
       rm -rf ${TROJAN_PANEL_UI_DATA}
 
     echo_content skyBlue "---> Trojan Panel Frontend uninstallation completed"
@@ -2256,6 +2379,7 @@ main() {
   echo_content yellow "25. Version query"
   echo_content yellow "26. Install DB Guard (whitelist + firewall for 9507/6378)"
   echo_content yellow "27. Install BBRv3 kernel (XanMod)"
+  echo_content yellow "28. Install/Update backup sidecar (定时备份 + 数据库恢复)"
   if ! read -r -p "Please choose (type 0 to exit): " selectInstall_type; then echo; exit 0; fi
   case ${selectInstall_type} in
   1)
@@ -2264,6 +2388,7 @@ main() {
     install_cert
     install_trojan_panel_ui
     install_dbguard
+    install_tp_backup
     ;;
   2)
     install_docker
@@ -2354,6 +2479,9 @@ main() {
     ;;
   27)
     install_bbr
+    ;;
+  28)
+    install_tp_backup
     ;;
   0|q|quit|exit)
     echo_content skyBlue "Bye."
